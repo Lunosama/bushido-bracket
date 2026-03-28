@@ -97,6 +97,17 @@ export default function Landing() {
           </button>
         </div>
 
+        {/* Crypto fairness badge */}
+        <div style={{
+          display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+          marginTop: 20, animation: "fu 0.6s ease 0.6s both"
+        }}>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 1L2 4v4c0 3.3 2.6 6.4 6 7 3.4-.6 6-3.7 6-7V4L8 1z" fill={ACCENT} opacity="0.8"/><path d="M7 9.5L5.5 8l-.7.7L7 10.9l4-4-.7-.7L7 9.5z" fill="#fff"/></svg>
+          <span style={{ fontFamily: "'VT323',monospace", fontSize: 16, color: "#fff", letterSpacing: 2, fontWeight: 600 }}>
+            POWERED BY WEB CRYPTO API — CRYPTOGRAPHICALLY FAIR
+          </span>
+        </div>
+
         {/* Quick nav links */}
         <div style={{
           display: "flex", gap: 24, justifyContent: "center", marginTop: 36,

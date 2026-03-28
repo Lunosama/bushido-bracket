@@ -65,7 +65,7 @@ export default function TipJar() {
 
       {/* Tier cards */}
       <div style={{
-        display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+        display: "grid", gridTemplateColumns: "repeat(4, 1fr)",
         gap: 16, marginBottom: 16
       }}>
         {tiers.map((t, i) => (
@@ -73,7 +73,7 @@ export default function TipJar() {
             background: "#111114", borderRadius: 14, border: `1px solid ${ACCENT}12`,
             padding: 28, textAlign: "center", animation: `fu 0.5s ease ${0.1 + i * 0.08}s both`,
             boxShadow: "0 4px 24px #00000040", transition: "border-color 0.3s, transform 0.2s",
-            cursor: "pointer"
+            cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center"
           }}
             onMouseEnter={e => { e.currentTarget.style.borderColor = `${t.color}40`; e.currentTarget.style.transform = "translateY(-4px)"; }}
             onMouseLeave={e => { e.currentTarget.style.borderColor = `${ACCENT}12`; e.currentTarget.style.transform = "translateY(0)"; }}
@@ -93,7 +93,7 @@ export default function TipJar() {
             </div>
             <p style={{
               fontFamily: "'VT323',monospace", fontSize: 20, color: "#9ca3af",
-              lineHeight: 1.4, marginBottom: 16
+              lineHeight: 1.4, marginBottom: 16, flex: 1
             }}>
               {t.desc}
             </p>
@@ -121,7 +121,8 @@ export default function TipJar() {
         <div style={{
           background: "#111114", borderRadius: 14, border: `1px solid ${ACCENT}12`,
           padding: 28, textAlign: "center", animation: "fu 0.5s ease 0.34s both",
-          boxShadow: "0 4px 24px #00000040", transition: "border-color 0.3s, transform 0.2s"
+          boxShadow: "0 4px 24px #00000040", transition: "border-color 0.3s, transform 0.2s",
+          display: "flex", flexDirection: "column", alignItems: "center"
         }}
           onMouseEnter={e => { e.currentTarget.style.borderColor = `#9ca3af40`; e.currentTarget.style.transform = "translateY(-4px)"; }}
           onMouseLeave={e => { e.currentTarget.style.borderColor = `${ACCENT}12`; e.currentTarget.style.transform = "translateY(0)"; }}
@@ -135,7 +136,7 @@ export default function TipJar() {
           </h3>
           <p style={{
             fontFamily: "'VT323',monospace", fontSize: 20, color: "#9ca3af",
-            lineHeight: 1.4, marginBottom: 16
+            lineHeight: 1.4, marginBottom: 16, flex: 1
           }}>
             Send whatever feels right. Every bit keeps the arena alive.
           </p>
