@@ -161,6 +161,85 @@
   }
 }
 
+/* TipJar responsive */
+.tipjar-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 16px;
+
+  @media (max-width: 768px) {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  @media (max-width: 480px) {
+    grid-template-columns: 1fr;
+  }
+}
+
+.tipjar-container {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 32px 20px;
+
+  @media (max-width: 480px) {
+    padding: 20px 14px;
+  }
+}
+
+.tipjar-header h1 {
+  font-family: 'Press Start 2P', sans-serif;
+  letter-spacing: 3px;
+  font-size: 22px;
+
+  @media (max-width: 480px) {
+    font-size: 16px;
+    letter-spacing: 2px;
+  }
+}
+
+.tipjar-header p {
+  margin-top: 10px;
+
+  @media (max-width: 480px) {
+    margin-top: 14px;
+    font-size: 18px;
+    line-height: 1.5;
+  }
+}
+
+.tipjar-card {
+  padding: 28px;
+
+  @media (max-width: 480px) {
+    padding: 20px 16px;
+  }
+}
+
+.tipjar-footer {
+  padding: 24px;
+
+  @media (max-width: 480px) {
+    padding: 18px 14px;
+  }
+}
+
+.tipjar-footer h2 {
+  margin-bottom: 10px;
+
+  @media (max-width: 480px) {
+    font-size: 9px;
+    margin-bottom: 12px;
+  }
+}
+
+.tipjar-footer p {
+  @media (max-width: 480px) {
+    font-size: 18px;
+    line-height: 1.6;
+  }
+}
+
 .ticks {
   position: relative;
   width: 100%;

@@ -49,11 +49,11 @@ export default function TipJar() {
   }
 
   return (
-    <div style={{ maxWidth: 900, margin: "0 auto", padding: "32px 20px" }}>
-      <div style={{ textAlign: "center", marginBottom: 28, animation: "fu 0.5s ease both" }}>
+    <div className="tipjar-container">
+      <div className="tipjar-header" style={{ textAlign: "center", marginBottom: 28, animation: "fu 0.5s ease both" }}>
         <h1 style={{
-          fontFamily: "'Press Start 2P',sans-serif", fontSize: 22, color: ACCENT,
-          letterSpacing: 3, textShadow: `0 0 30px ${ACCENT}55`
+          color: ACCENT,
+          textShadow: `0 0 30px ${ACCENT}55`
         }}>
           SUPPORT THE ARENA
         </h1>
@@ -64,14 +64,11 @@ export default function TipJar() {
       </div>
 
       {/* Tier cards */}
-      <div style={{
-        display: "grid", gridTemplateColumns: "repeat(4, 1fr)",
-        gap: 16, marginBottom: 16
-      }}>
+      <div className="tipjar-grid">
         {tiers.map((t, i) => (
-          <div key={t.name} style={{
+          <div key={t.name} className="tipjar-card" style={{
             background: "#111114", borderRadius: 14, border: `1px solid ${ACCENT}12`,
-            padding: 28, textAlign: "center", animation: `fu 0.5s ease ${0.1 + i * 0.08}s both`,
+            textAlign: "center", animation: `fu 0.5s ease ${0.1 + i * 0.08}s both`,
             boxShadow: "0 4px 24px #00000040", transition: "border-color 0.3s, transform 0.2s",
             cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center"
           }}
@@ -118,9 +115,9 @@ export default function TipJar() {
         ))}
 
         {/* Custom amount card */}
-        <div style={{
+        <div className="tipjar-card" style={{
           background: "#111114", borderRadius: 14, border: `1px solid ${ACCENT}12`,
-          padding: 28, textAlign: "center", animation: "fu 0.5s ease 0.34s both",
+          textAlign: "center", animation: "fu 0.5s ease 0.34s both",
           boxShadow: "0 4px 24px #00000040", transition: "border-color 0.3s, transform 0.2s",
           display: "flex", flexDirection: "column", alignItems: "center"
         }}
@@ -181,9 +178,9 @@ export default function TipJar() {
       </div>
 
       {/* Alternative support */}
-      <div style={{
+      <div className="tipjar-footer" style={{
         background: "#111114", borderRadius: 14, border: `1px solid ${ACCENT}12`,
-        padding: 24, textAlign: "center", animation: "fu 0.5s ease 0.46s both",
+        textAlign: "center", animation: "fu 0.5s ease 0.46s both",
         boxShadow: "0 4px 24px #00000040"
       }}>
         <h2 style={{
