@@ -579,13 +579,28 @@ function generateFight(durMs_raw,seed,winnerId,leftId,lChar,rChar){
     if(attackerL){rx=Math.min(BOUND_R_MAX,rx+5);}else{lx=Math.max(BOUND_L_MIN,lx-5);}clamp();
   };
 
-  // Breathing gap
-  const breathe=()=>{
-    const steps=1+Math.floor(rng()*2);
-    for(let i=0;i<steps;i++){kf("idle",iF(),"idle",iR());t+=100+rng()*100;}
-    // Reset positions gently toward health bar centers
-    const neutralL=isRangedL?23:30;const neutralR=isRangedR?77:70;
-    lx=lx*0.6+neutralL*0.4;rx=rx*0.6+neutralR*0.4;clamp();
+  // Breathing gap — with variety
+  const breathe=(momentum)=>{
+    const bVar=rng();
+    if(bVar<0.25&&canBlock(lChar)&&canBlock(rChar)){
+      // Tense breathe — both guard, positions stay put
+      for(let i=0;i<2;i++){kf("defend",0,"defend",0);t+=140;}
+      kf("idle",iF(),"idle",iR());t+=100;
+    }else if(bVar<0.5&&momentum!==undefined&&momentum!==0){
+      // Aggressive breathe — momentum leader steps forward
+      const leaderL=momentum>0?winL:!winL;
+      if(leaderL){lx=Math.min(BOUND_L_MAX,lx+2.5);}else{rx=Math.max(BOUND_R_MIN,rx-2.5);}
+      clamp();
+      if(leaderL)kf("run",0,"idle",iR());else kf("idle",iF(),"run",0);
+      t+=120;
+      kf("idle",iF(),"idle",iR());t+=100;
+    }else{
+      // Classic gentle drift
+      const steps=1+Math.floor(rng()*2);
+      for(let i=0;i<steps;i++){kf("idle",iF(),"idle",iR());t+=100+rng()*100;}
+      const neutralL=isRangedL?23:30;const neutralR=isRangedR?77:70;
+      lx=lx*0.6+neutralL*0.4;rx=rx*0.6+neutralR*0.4;clamp();
+    }
   };
 
   // Check what exchanges each character can do
@@ -638,31 +653,76 @@ function generateFight(durMs_raw,seed,winnerId,leftId,lChar,rChar){
     }
   };
 
-  // Staredown — dramatic pause after big moments
+  // Staredown — dramatic pause after big moments (4 variants)
   const staredown2=()=>{
-    const steps=6+Math.floor(rng()*6);
-    for(let i=0;i<steps;i++){kf("idle",iF(),"idle",iR());t+=150;}
-    const nL=isRangedL?23:30,nR=isRangedR?77:70;
-    lx=lx*0.7+nL*0.3;rx=rx*0.7+nR*0.3;clamp();
+    const variant=Math.floor(rng()*4);
+    if(variant===0){
+      // Classic: idle frames, drift toward neutral
+      const steps=6+Math.floor(rng()*6);
+      for(let i=0;i<steps;i++){kf("idle",iF(),"idle",iR());t+=150;}
+      const nL=isRangedL?23:30,nR=isRangedR?77:70;
+      lx=lx*0.7+nL*0.3;rx=rx*0.7+nR*0.3;clamp();
+    }else if(variant===1&&canBlock(lChar)&&canBlock(rChar)){
+      // Weapon ready: both guard, mutual respect
+      for(let i=0;i<4;i++){kf("defend",Math.min(i,nf(lChar,"defend")-1),"defend",Math.min(i,nf(rChar,"defend")-1));t+=160;}
+      for(let i=0;i<3;i++){kf("idle",iF(),"idle",iR());t+=140;}
+    }else if(variant===2){
+      // Distance reset: both back away to create wide shot tension
+      lx=Math.max(BOUND_L_MIN,lx-8);rx=Math.min(BOUND_R_MAX,rx+8);clamp();
+      for(let i=0;i<3;i++){kf("run",i%nf(lChar,"run"),"run",i%nf(rChar,"run"));t+=100;}
+      for(let i=0;i<5+Math.floor(rng()*4);i++){kf("idle",iF(),"idle",iR());t+=170;}
+    }else{
+      // Near-clash feint: close in, one feints, other flinches
+      const gap=rx-lx;
+      if(gap>CONTACT_LIGHT){const closeBy=gap-CONTACT_LIGHT;lx+=closeBy*0.5;rx-=closeBy*0.5;clamp();}
+      kf("idle",iF(),"idle",iR());t+=200;
+      // Feint: left attacks frame 0, right flinches to defend (or vice versa)
+      if(rng()<0.5){kf("attack1",0,"defend",0);t+=120;kf("attack1",1,"defend",0);t+=80;}
+      else{kf("defend",0,"attack1",0);t+=120;kf("defend",0,"attack1",1);t+=80;}
+      for(let i=0;i<3;i++){kf("idle",iF(),"idle",iR());t+=150;}
+      // Back off slightly
+      lx=Math.max(BOUND_L_MIN,lx-3);rx=Math.min(BOUND_R_MAX,rx+3);clamp();
+    }
   };
 
   // Damage scaling — clamps hit damage to remaining budget
   const sDmg=(base,budgetLeft)=>Math.max(1,Math.min(base,Math.floor(Math.max(budgetLeft,1)*0.65)));
 
+  // Weighted pool selection helper
+  const pickPool=(pool)=>{
+    const total=pool.reduce((s,p)=>s+p.w,0);
+    let r2=rng()*total;
+    for(const p of pool){r2-=p.w;if(r2<=0)return p.type;}
+    return pool[pool.length-1].type;
+  };
+
   // MAIN FIGHT LOOP — 5-phase narrative arc with burst pacing
   const fightTime=Math.max(3000,durMs-7000);
-  const totalBursts=Math.max(2,Math.round(fightTime/2200));
+  const totalBursts=Math.max(2,Math.round(fightTime/2000));
   let winnerDmgDealt=0,loserDmgDealt=0;
-  let staredownsLeft=1+Math.floor(rng()*2);
+  let staredownsLeft=2+Math.floor(rng()*2);
+  let momentum=0; // positive=winner streak, negative=loser streak
+  let prevPhase=-1;
 
   for(let burst=0;burst<totalBursts&&t<durMs-5000;burst++){
     const prog=burst/totalBursts;
     // 5-phase narrative arc
     const phase=prog<0.2?0:prog<0.45?1:prog<0.6?2:prog<0.8?3:4;
-    // Burst size increases in later phases for intensity
-    const burstSize=phase<=1?2+Math.floor(rng()*2):3+Math.floor(rng()*2);
+
+    // Phase transition marker — dramatic pause when phase changes
+    if(phase!==prevPhase&&prevPhase>=0){
+      lx=Math.max(BOUND_L_MIN,lx-6);rx=Math.min(BOUND_R_MAX,rx+6);clamp();
+      const transSteps=6+Math.floor(rng()*3);
+      for(let i=0;i<transSteps;i++){kf("idle",iF(),"idle",iR());t+=180;}
+    }
+    prevPhase=phase;
+
+    // Burst size varies by phase for pacing
+    const burstSize=phase===0?1+Math.floor(rng()*3):phase===1?2+Math.floor(rng()*3):phase===2?3+Math.floor(rng()*3):phase===3?3+Math.floor(rng()*4):4+Math.floor(rng()*3);
 
     for(let ex=0;ex<burstSize;ex++){
+      if(t>=durMs-5000)break; // time guard for larger bursts
+
       // Who attacks? Varies by phase for drama
       let aL;
       if(phase===0)aL=rng()>0.5;
@@ -678,77 +738,157 @@ function generateFight(durMs_raw,seed,winnerId,leftId,lChar,rChar){
       const dCB=canBlock(defC);
       const wBL=winnerMainDmg-winnerDmgDealt,lBL=loserDmgBudget-loserDmgDealt;
       const bL=isWA?wBL:lBL;
+      const defBL=isWA?lBL:wBL; // defender's budget — used for counter damage
 
       // Budget exhausted — defend instead
       if(bL<=0){if(dCB)blockExchange(aL);else if(canDash(defC))dodgeExchange(aL);else{kf("idle",iF(),"idle",iR());t+=120;}continue;}
 
-      const r=rng();
-
-      if(isRng){
-        // Ranged exchanges
-        if(r<0.5){const d=sDmg(pick([5,6,7,8]),bL);rangedAttack(aL,d);if(isWA)winnerDmgDealt+=d;else loserDmgDealt+=d;}
-        else if(r<0.7&&dCB){const cd=sDmg(pick([3,4]),isWA?lBL:wBL);counterExchange(aL,cd);if(isWA)loserDmgDealt+=cd;else winnerDmgDealt+=cd;}
-        else if(r<0.85&&canDash(defC)){dodgeExchange(aL);}
-        else{const d=sDmg(pick([5,6,7]),bL);rangedAttack(aL,d);if(isWA)winnerDmgDealt+=d;else loserDmgDealt+=d;}
-      }else if(phase===0){
-        // Opening: lights, blocks, dodges — cautious
-        if(r<0.35){const d=sDmg(pick([4,5,6]),bL);meleeAttack(aL,"attack1",d,1);if(isWA)winnerDmgDealt+=d;else loserDmgDealt+=d;}
-        else if(r<0.55&&dCB){blockExchange(aL);}
-        else if(r<0.75&&canDash(defC)){dodgeExchange(aL);}
-        else{const d=sDmg(pick([4,5]),bL);meleeAttack(aL,"attack1",d,1);if(isWA)winnerDmgDealt+=d;else loserDmgDealt+=d;}
-      }else if(phase===1){
-        // Escalation: mediums, combos start
-        if(atkC==="demon"&&!(aL?lDemonFs:rDemonFs)){shoutExchange(aL);}
-        else if(r<0.25){const d=sDmg(pick([5,6,7]),bL);meleeAttack(aL,"attack2",d,2);if(isWA)winnerDmgDealt+=d;else loserDmgDealt+=d;}
-        else if(r<0.45){const d1=sDmg(pick([3,4]),bL),d2=sDmg(pick([5,6]),bL-d1);comboAttack(aL,[{anim:"attack1",dmg:d1,shake:1},{anim:"attack2",dmg:d2,shake:2}]);if(isWA)winnerDmgDealt+=d1+d2;else loserDmgDealt+=d1+d2;}
-        else if(r<0.65&&dCB){const cd=sDmg(pick([3,4]),isWA?lBL:wBL);counterExchange(aL,cd);if(isWA)loserDmgDealt+=cd;else winnerDmgDealt+=cd;}
-        else if(r<0.8&&canDash(defC)){dodgeExchange(aL);}
-        else{const d=sDmg(pick([5,6]),bL);meleeAttack(aL,"attack1",d,1);if(isWA)winnerDmgDealt+=d;else loserDmgDealt+=d;}
-      }else if(phase===2){
-        // Loser Rally: loser lands big hits, creates tension
-        if(r<0.3){const d=sDmg(pick([7,8,9]),bL);meleeAttack(aL,"attack2",d,2);if(isWA)winnerDmgDealt+=d;else loserDmgDealt+=d;}
-        else if(r<0.5&&hasAtk3(atkC)){const d=sDmg(pick([10,12]),bL);meleeAttack(aL,"attack3",d,3);if(isWA)winnerDmgDealt+=d;else loserDmgDealt+=d;}
-        else if(r<0.65&&canAerial(atkC)){const d=sDmg(pick([9,11]),bL);aerialAttack(aL,d);if(isWA)winnerDmgDealt+=d;else loserDmgDealt+=d;}
-        else if(r<0.8&&dCB){blockExchange(aL);}
-        else{const d=sDmg(pick([6,7,8]),bL);meleeAttack(aL,"attack2",d,2);if(isWA)winnerDmgDealt+=d;else loserDmgDealt+=d;}
-      }else if(phase===3){
-        // Turning Point: winner fights back with heavies and combos
-        if(atkC==="demon"&&!(aL?lDemonFs:rDemonFs)){shoutExchange(aL);}
-        else if(r<0.2){const d1=sDmg(pick([5,6]),bL),d2=sDmg(pick([7,8]),bL-d1);comboAttack(aL,[{anim:"attack1",dmg:d1,shake:1},{anim:"attack3",dmg:d2,shake:3}]);if(isWA)winnerDmgDealt+=d1+d2;else loserDmgDealt+=d1+d2;}
-        else if(r<0.4&&hasAtk3(atkC)){const d=sDmg(pick([10,12,14]),bL);meleeAttack(aL,"attack3",d,3);if(isWA)winnerDmgDealt+=d;else loserDmgDealt+=d;}
-        else if(r<0.55&&canAerial(atkC)){const d=sDmg(pick([10,12]),bL);aerialAttack(aL,d);if(isWA)winnerDmgDealt+=d;else loserDmgDealt+=d;}
-        else if(r<0.7){const d=sDmg(pick([7,8,9]),bL);meleeAttack(aL,"attack2",d,2);if(isWA)winnerDmgDealt+=d;else loserDmgDealt+=d;}
-        else if(r<0.85&&dCB){const cd=sDmg(pick([4,5]),isWA?lBL:wBL);counterExchange(aL,cd);if(isWA)loserDmgDealt+=cd;else winnerDmgDealt+=cd;}
-        else{const d=sDmg(pick([6,7]),bL);meleeAttack(aL,"attack1",d,1);if(isWA)winnerDmgDealt+=d;else loserDmgDealt+=d;}
-      }else{
-        // Climax: winner dominant — rush attacks, dash attacks, big combos
-        if(r<0.18&&canDashAtk(atkC)){const d=sDmg(pick([12,14]),bL);dashAttackExchange(aL,d);if(isWA)winnerDmgDealt+=d;else loserDmgDealt+=d;}
-        else if(r<0.35){const dp=sDmg(pick([3,4]),Math.floor(bL/3));rushAttack(aL,3,dp);const td=dp*3;if(isWA)winnerDmgDealt+=td;else loserDmgDealt+=td;}
-        else if(r<0.55&&hasAtk3(atkC)){const d=sDmg(pick([11,13,15]),bL);meleeAttack(aL,"attack3",d,3);if(isWA)winnerDmgDealt+=d;else loserDmgDealt+=d;}
-        else if(r<0.7&&canAerial(atkC)){const d=sDmg(pick([10,12]),bL);aerialAttack(aL,d);if(isWA)winnerDmgDealt+=d;else loserDmgDealt+=d;}
-        else if(r<0.85){const d1=sDmg(pick([3,4]),bL),d2=sDmg(pick([4,5]),bL-d1),d3=sDmg(pick([6,8]),bL-d1-d2);comboAttack(aL,[{anim:"attack1",dmg:d1,shake:1},{anim:"attack2",dmg:d2,shake:2},{anim:"attack3",dmg:d3,shake:3}]);if(isWA)winnerDmgDealt+=d1+d2+d3;else loserDmgDealt+=d1+d2+d3;}
-        else{const d=sDmg(pick([8,9,10]),bL);meleeAttack(aL,"attack2",d,2);if(isWA)winnerDmgDealt+=d;else loserDmgDealt+=d;}
+      // Momentum break: at high momentum, trailing fighter gets a guaranteed block/dodge
+      if(Math.abs(momentum)>=3){
+        const trailingIsAttacker=momentum>0?!isWA:isWA;
+        if(!trailingIsAttacker){
+          // Trailing fighter is defending — force block or dodge for comeback moment
+          if(dCB){blockExchange(aL);momentum=momentum>0?Math.max(momentum-2,0):Math.min(momentum+2,0);continue;}
+          else if(canDash(defC)){dodgeExchange(aL);momentum=momentum>0?Math.max(momentum-2,0):Math.min(momentum+2,0);continue;}
+        }
       }
 
-      // Staredown after big moments in rally/turning point phases
-      if(staredownsLeft>0&&(phase===2||phase===3)&&rng()<0.25){staredownsLeft--;staredown2();}
+      // Critical hit check — higher chance during loser rally (phase 2)
+      const critChance=phase===2?0.18:0.12;
+      const isCrit=rng()<critChance;
+      const critMul=isCrit?1.5:1;
+      const critShake=isCrit?1:0;
+      // Momentum damage bonus: leading side gets +2 per hit at |momentum|>=2
+      const momBonus=(Math.abs(momentum)>=2&&((momentum>0&&isWA)||(momentum<0&&!isWA)))?2:0;
+      const cDmg=(base)=>{const d=sDmg(base,bL);return Math.min(Math.floor(d*critMul)+momBonus,bL);};
+
+      let dmgDealt=0; // track damage dealt this exchange for momentum
+
+      if(isRng){
+        // Ranged exchanges — wider damage ranges
+        const pool=[{type:"ranged",w:45},{type:"rangedFallback",w:15}];
+        if(dCB)pool.push({type:"counter",w:20});
+        if(canDash(defC))pool.push({type:"dodge",w:15});
+        const move=pickPool(pool);
+        if(move==="ranged"){const d=cDmg(pick([3,5,6,7,9]));rangedAttack(aL,d);dmgDealt=d;if(isWA)winnerDmgDealt+=d;else loserDmgDealt+=d;}
+        else if(move==="counter"&&dCB){const cd=sDmg(pick([2,3,5]),defBL);counterExchange(aL,cd);if(isWA)loserDmgDealt+=cd;else winnerDmgDealt+=cd;}
+        else if(move==="dodge"){dodgeExchange(aL);}
+        else{const d=cDmg(pick([4,5,6,8]));rangedAttack(aL,d);dmgDealt=d;if(isWA)winnerDmgDealt+=d;else loserDmgDealt+=d;}
+      }else if(phase===0){
+        // Opening: lights, blocks, dodges, occasional counter or clash — cautious
+        const pool=[{type:"light",w:30},{type:"lightFallback",w:15}];
+        if(dCB)pool.push({type:"block",w:18},{type:"counter",w:8});
+        if(canDash(defC))pool.push({type:"dodge",w:15});
+        pool.push({type:"clash",w:6});
+        pool.push({type:"jabCombo",w:8});
+        const move=pickPool(pool);
+        if(move==="light"){const d=cDmg(pick([2,4,5,6,8]));meleeAttack(aL,"attack1",d,1+critShake);dmgDealt=d;if(isWA)winnerDmgDealt+=d;else loserDmgDealt+=d;}
+        else if(move==="block"&&dCB){blockExchange(aL);}
+        else if(move==="dodge"){dodgeExchange(aL);}
+        else if(move==="counter"&&dCB){const cd=sDmg(pick([2,3,4]),defBL);counterExchange(aL,cd);if(isWA)loserDmgDealt+=cd;else winnerDmgDealt+=cd;}
+        else if(move==="clash"){const wB2=winnerMainDmg-winnerDmgDealt,lB2=loserDmgBudget-loserDmgDealt;if(wB2>3&&lB2>3){const cLD=winL?sDmg(pick([3,4,5]),wB2):sDmg(pick([3,4,5]),lB2);const cRD=winL?sDmg(pick([2,3,4]),lB2):sDmg(pick([2,3,4]),wB2);clashExchange(cLD,cRD);if(winL){winnerDmgDealt+=cLD;loserDmgDealt+=cRD;}else{loserDmgDealt+=cLD;winnerDmgDealt+=cRD;}}else{const d=cDmg(pick([2,4,5,7]));meleeAttack(aL,"attack1",d,1);dmgDealt=d;if(isWA)winnerDmgDealt+=d;else loserDmgDealt+=d;}}
+        else if(move==="jabCombo"){const d1=cDmg(pick([2,3])),d2=cDmg(pick([2,3,4]));comboAttack(aL,[{anim:"attack1",dmg:d1,shake:1},{anim:"attack1",dmg:d2,shake:1}]);dmgDealt=d1+d2;if(isWA)winnerDmgDealt+=d1+d2;else loserDmgDealt+=d1+d2;}
+        else{const d=cDmg(pick([2,4,5,7]));meleeAttack(aL,"attack1",d,1);dmgDealt=d;if(isWA)winnerDmgDealt+=d;else loserDmgDealt+=d;}
+      }else if(phase===1){
+        // Escalation: mediums, combos, aerial/dash unlocked
+        if(atkC==="demon"&&!(aL?lDemonFs:rDemonFs)){shoutExchange(aL);}
+        else{
+          const pool=[{type:"medium",w:22},{type:"combo12",w:18},{type:"lightFallback",w:12},{type:"jabCombo",w:10}];
+          if(dCB)pool.push({type:"counter",w:12});
+          if(canDash(defC))pool.push({type:"dodge",w:12});
+          if(canAerial(atkC))pool.push({type:"aerial",w:8});
+          if(canDashAtk(atkC))pool.push({type:"dashAtk",w:6});
+          const move=pickPool(pool);
+          if(move==="medium"){const d=cDmg(pick([3,5,7,9]));meleeAttack(aL,"attack2",d,2+critShake);dmgDealt=d;if(isWA)winnerDmgDealt+=d;else loserDmgDealt+=d;}
+          else if(move==="combo12"){const d1=cDmg(pick([2,3,4])),d2=cDmg(pick([3,5,7]));comboAttack(aL,[{anim:"attack1",dmg:d1,shake:1},{anim:"attack2",dmg:d2,shake:2}]);dmgDealt=d1+d2;if(isWA)winnerDmgDealt+=d1+d2;else loserDmgDealt+=d1+d2;}
+          else if(move==="jabCombo"){const d1=cDmg(pick([2,3])),d2=cDmg(pick([3,4]));comboAttack(aL,[{anim:"attack1",dmg:d1,shake:1},{anim:"attack1",dmg:d2,shake:1}]);dmgDealt=d1+d2;if(isWA)winnerDmgDealt+=d1+d2;else loserDmgDealt+=d1+d2;}
+          else if(move==="counter"&&dCB){const cd=sDmg(pick([2,3,5]),defBL);counterExchange(aL,cd);if(isWA)loserDmgDealt+=cd;else winnerDmgDealt+=cd;}
+          else if(move==="dodge"){dodgeExchange(aL);}
+          else if(move==="aerial"&&canAerial(atkC)){const d=cDmg(pick([6,8,10]));aerialAttack(aL,d);dmgDealt=d;if(isWA)winnerDmgDealt+=d;else loserDmgDealt+=d;}
+          else if(move==="dashAtk"&&canDashAtk(atkC)){const d=cDmg(pick([7,9,11]));dashAttackExchange(aL,d);dmgDealt=d;if(isWA)winnerDmgDealt+=d;else loserDmgDealt+=d;}
+          else{const d=cDmg(pick([3,5,7]));meleeAttack(aL,"attack1",d,1);dmgDealt=d;if(isWA)winnerDmgDealt+=d;else loserDmgDealt+=d;}
+        }
+      }else if(phase===2){
+        // Loser Rally: loser lands big hits, rush attacks, desperation combos
+        const pool=[{type:"heavy2",w:22},{type:"rush",w:10},{type:"desperateCombo",w:12},{type:"medFallback",w:10}];
+        if(hasAtk3(atkC))pool.push({type:"heavy3",w:18});
+        if(canAerial(atkC))pool.push({type:"aerial",w:14});
+        if(dCB)pool.push({type:"block",w:8},{type:"counter",w:10});
+        const move=pickPool(pool);
+        if(move==="heavy2"){const d=cDmg(pick([5,7,9,11]));meleeAttack(aL,"attack2",d,2+critShake);dmgDealt=d;if(isWA)winnerDmgDealt+=d;else loserDmgDealt+=d;}
+        else if(move==="heavy3"&&hasAtk3(atkC)){const d=cDmg(pick([8,10,13]));meleeAttack(aL,"attack3",d,3+critShake);dmgDealt=d;if(isWA)winnerDmgDealt+=d;else loserDmgDealt+=d;}
+        else if(move==="aerial"&&canAerial(atkC)){const d=cDmg(pick([7,9,12]));aerialAttack(aL,d);dmgDealt=d;if(isWA)winnerDmgDealt+=d;else loserDmgDealt+=d;}
+        else if(move==="rush"){const dp=cDmg(pick([2,3,4]));rushAttack(aL,3,dp);const td=dp*3;dmgDealt=td;if(isWA)winnerDmgDealt+=td;else loserDmgDealt+=td;}
+        else if(move==="desperateCombo"){const d1=cDmg(pick([3,4])),d2=cDmg(pick([4,5,6])),d3=cDmg(pick([5,7,8]));comboAttack(aL,[{anim:"attack1",dmg:d1,shake:1},{anim:"attack2",dmg:d2,shake:2},{anim:"attack2",dmg:d3,shake:3}]);dmgDealt=d1+d2+d3;if(isWA)winnerDmgDealt+=d1+d2+d3;else loserDmgDealt+=d1+d2+d3;}
+        else if(move==="block"&&dCB){blockExchange(aL);}
+        else if(move==="counter"&&dCB){const cd=sDmg(pick([3,5,6]),defBL);counterExchange(aL,cd);if(isWA)loserDmgDealt+=cd;else winnerDmgDealt+=cd;}
+        else{const d=cDmg(pick([5,7,9]));meleeAttack(aL,"attack2",d,2);dmgDealt=d;if(isWA)winnerDmgDealt+=d;else loserDmgDealt+=d;}
+      }else if(phase===3){
+        // Turning Point: winner fights back with heavies, combos, rush attacks
+        if(atkC==="demon"&&!(aL?lDemonFs:rDemonFs)){shoutExchange(aL);}
+        else{
+          const pool=[{type:"combo13",w:18},{type:"medium",w:14},{type:"rush",w:10},{type:"lightFallback",w:10}];
+          if(hasAtk3(atkC))pool.push({type:"heavy3",w:18});
+          if(canAerial(atkC))pool.push({type:"aerial",w:14});
+          if(dCB)pool.push({type:"counter",w:10});
+          pool.push({type:"clash",w:8});
+          const move=pickPool(pool);
+          if(move==="combo13"){const d1=cDmg(pick([3,5])),d2=cDmg(pick([6,8,10]));comboAttack(aL,[{anim:"attack1",dmg:d1,shake:1},{anim:"attack3",dmg:d2,shake:3}]);dmgDealt=d1+d2;if(isWA)winnerDmgDealt+=d1+d2;else loserDmgDealt+=d1+d2;}
+          else if(move==="heavy3"&&hasAtk3(atkC)){const d=cDmg(pick([8,10,13,16]));meleeAttack(aL,"attack3",d,3+critShake);dmgDealt=d;if(isWA)winnerDmgDealt+=d;else loserDmgDealt+=d;}
+          else if(move==="aerial"&&canAerial(atkC)){const d=cDmg(pick([8,10,13]));aerialAttack(aL,d);dmgDealt=d;if(isWA)winnerDmgDealt+=d;else loserDmgDealt+=d;}
+          else if(move==="medium"){const d=cDmg(pick([5,7,9,11]));meleeAttack(aL,"attack2",d,2+critShake);dmgDealt=d;if(isWA)winnerDmgDealt+=d;else loserDmgDealt+=d;}
+          else if(move==="rush"){const dp=cDmg(pick([3,4,5]));rushAttack(aL,3,dp);const td=dp*3;dmgDealt=td;if(isWA)winnerDmgDealt+=td;else loserDmgDealt+=td;}
+          else if(move==="counter"&&dCB){const cd=sDmg(pick([3,5,6]),defBL);counterExchange(aL,cd);if(isWA)loserDmgDealt+=cd;else winnerDmgDealt+=cd;}
+          else if(move==="clash"){const wB2=winnerMainDmg-winnerDmgDealt,lB2=loserDmgBudget-loserDmgDealt;if(wB2>4&&lB2>4){const cLD=winL?sDmg(pick([4,6,7]),wB2):sDmg(pick([4,6,7]),lB2);const cRD=winL?sDmg(pick([3,5,6]),lB2):sDmg(pick([3,5,6]),wB2);clashExchange(cLD,cRD);if(winL){winnerDmgDealt+=cLD;loserDmgDealt+=cRD;}else{loserDmgDealt+=cLD;winnerDmgDealt+=cRD;}}else{const d=cDmg(pick([5,7,9]));meleeAttack(aL,"attack2",d,2);dmgDealt=d;if(isWA)winnerDmgDealt+=d;else loserDmgDealt+=d;}}
+          else{const d=cDmg(pick([4,6,8]));meleeAttack(aL,"attack1",d,1);dmgDealt=d;if(isWA)winnerDmgDealt+=d;else loserDmgDealt+=d;}
+        }
+      }else{
+        // Climax: winner dominant — rush attacks, dash attacks, big combos, mid-burst clashes
+        const pool=[{type:"rush",w:15},{type:"tripleCombo",w:15},{type:"medFallback",w:10}];
+        if(canDashAtk(atkC))pool.push({type:"dashAtk",w:16});
+        if(hasAtk3(atkC))pool.push({type:"heavy3",w:18});
+        if(canAerial(atkC))pool.push({type:"aerial",w:14});
+        pool.push({type:"clash",w:8});
+        if(dCB)pool.push({type:"counter",w:6});
+        // Air finisher combo for characters with aerial capability
+        if(canAerial(atkC))pool.push({type:"airCombo",w:10});
+        // Dash combo for characters with dash attack
+        if(canDashAtk(atkC))pool.push({type:"dashCombo",w:8});
+        const move=pickPool(pool);
+        if(move==="dashAtk"&&canDashAtk(atkC)){const d=cDmg(pick([10,13,16]));dashAttackExchange(aL,d);dmgDealt=d;if(isWA)winnerDmgDealt+=d;else loserDmgDealt+=d;}
+        else if(move==="rush"){const dp=cDmg(pick([3,4,5]));rushAttack(aL,3,dp);const td=dp*3;dmgDealt=td;if(isWA)winnerDmgDealt+=td;else loserDmgDealt+=td;}
+        else if(move==="heavy3"&&hasAtk3(atkC)){const d=cDmg(pick([9,11,14,17]));meleeAttack(aL,"attack3",d,Math.min(3+critShake,4));dmgDealt=d;if(isWA)winnerDmgDealt+=d;else loserDmgDealt+=d;}
+        else if(move==="aerial"&&canAerial(atkC)){const d=cDmg(pick([8,10,13]));aerialAttack(aL,d);dmgDealt=d;if(isWA)winnerDmgDealt+=d;else loserDmgDealt+=d;}
+        else if(move==="tripleCombo"){const d1=cDmg(pick([2,3,4])),d2=cDmg(pick([3,4,6])),d3=cDmg(pick([5,7,9]));comboAttack(aL,[{anim:"attack1",dmg:d1,shake:1},{anim:"attack2",dmg:d2,shake:2},{anim:"attack3",dmg:d3,shake:3}]);dmgDealt=d1+d2+d3;if(isWA)winnerDmgDealt+=d1+d2+d3;else loserDmgDealt+=d1+d2+d3;}
+        else if(move==="airCombo"&&canAerial(atkC)){const d1=cDmg(pick([3,4])),d2=cDmg(pick([4,5,6]));comboAttack(aL,[{anim:"attack1",dmg:d1,shake:1},{anim:"attack2",dmg:d2,shake:2}]);const d3=cDmg(pick([7,9,11]));aerialAttack(aL,d3);dmgDealt=d1+d2+d3;if(isWA)winnerDmgDealt+=d1+d2+d3;else loserDmgDealt+=d1+d2+d3;}
+        else if(move==="dashCombo"&&canDashAtk(atkC)){const d1=cDmg(pick([3,4]));meleeAttack(aL,"attack1",d1,1);const d2=cDmg(pick([9,11,13]));dashAttackExchange(aL,d2);dmgDealt=d1+d2;if(isWA)winnerDmgDealt+=d1+d2;else loserDmgDealt+=d1+d2;}
+        else if(move==="clash"){const wB2=winnerMainDmg-winnerDmgDealt,lB2=loserDmgBudget-loserDmgDealt;if(wB2>4&&lB2>4){const cLD=winL?sDmg(pick([5,7,8]),wB2):sDmg(pick([5,7,8]),lB2);const cRD=winL?sDmg(pick([4,6,7]),lB2):sDmg(pick([4,6,7]),wB2);clashExchange(cLD,cRD);if(winL){winnerDmgDealt+=cLD;loserDmgDealt+=cRD;}else{loserDmgDealt+=cLD;winnerDmgDealt+=cRD;}}else{const d=cDmg(pick([7,9,11]));meleeAttack(aL,"attack2",d,2);dmgDealt=d;if(isWA)winnerDmgDealt+=d;else loserDmgDealt+=d;}}
+        else if(move==="counter"&&dCB){const cd=sDmg(pick([4,6,7]),defBL);counterExchange(aL,cd);if(isWA)loserDmgDealt+=cd;else winnerDmgDealt+=cd;}
+        else{const d=cDmg(pick([6,8,10,12]));meleeAttack(aL,"attack2",d,2);dmgDealt=d;if(isWA)winnerDmgDealt+=d;else loserDmgDealt+=d;}
+      }
+
+      // Update momentum based on damage dealt
+      if(dmgDealt>0){if(isWA)momentum=Math.min(momentum+1,4);else momentum=Math.max(momentum-1,-4);}
+
+      // Staredown after big moments — now in phases 1-4 (not just 2-3)
+      if(staredownsLeft>0&&phase>=1&&rng()<0.22){staredownsLeft--;staredown2();}
 
       // Short pause between exchanges within a burst (NOT full breathe)
       if(ex<burstSize-1){kf("idle",iF(),"idle",iR());t+=80+rng()*60;}
     }
 
     // Breathe between bursts
-    breathe();
+    breathe(momentum);
 
-    // Occasional clash exchange between bursts for drama
-    if(phase>=1&&rng()<0.12){
+    // Occasional clash exchange between bursts for drama — increased frequency
+    if(rng()<0.20){
       const wB2=winnerMainDmg-winnerDmgDealt,lB2=loserDmgBudget-loserDmgDealt;
       if(wB2>4&&lB2>4){
-        const cLD=winL?sDmg(pick([4,5,6]),wB2):sDmg(pick([4,5,6]),lB2);
-        const cRD=winL?sDmg(pick([3,4,5]),lB2):sDmg(pick([3,4,5]),wB2);
+        const cLD=winL?sDmg(pick([4,5,7]),wB2):sDmg(pick([4,5,7]),lB2);
+        const cRD=winL?sDmg(pick([3,4,6]),lB2):sDmg(pick([3,4,6]),wB2);
         clashExchange(cLD,cRD);
         if(winL){winnerDmgDealt+=cLD;loserDmgDealt+=cRD;}else{loserDmgDealt+=cLD;winnerDmgDealt+=cRD;}
-        breathe();
+        breathe(momentum);
       }
     }
   }
